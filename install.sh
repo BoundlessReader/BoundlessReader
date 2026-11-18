@@ -1,8 +1,8 @@
 #!/bin/bash
 # Boundless macOS installer and updater
-# Usage: bash <(curl -fsSL "https://raw.githubusercontent.com/BoundlessReader/Boundless/main/install.sh")
+# Usage: bash <(curl -fsSL "https://raw.githubusercontent.com/BoundlessReader/BoundlessReader/main/install.sh")
 #
-# Downloads the latest release from github.com/BoundlessReader/Boundless, checks it
+# Downloads the latest release from github.com/BoundlessReader/BoundlessReader, checks it
 # against the SHA-256 GitHub publishes for the file and replaces Boundless.app.
 #
 # Flags: --demo (preview, changes nothing) --discord --no-anim --plain --help --version
@@ -11,7 +11,10 @@
 set -euo pipefail
 
 INSTALLER_VERSION="2.0.0"
-REPO="BoundlessReader/Boundless"
+# The repo as GitHub names it now. It was BoundlessReader/Boundless until 2026-11-12: that name still answers, but the addresses
+# GitHub sends for the files carry the new one.
+REPO="BoundlessReader/BoundlessReader"
+OLD_REPO="BoundlessReader/Boundless"
 DISCORD_URL="https://discord.gg/BDbk4AYV72"
 DISCORD_API="https://discord.com/api/v10/invites/BDbk4AYV72?with_counts=true"
 INSTALL_DIR="${BOUNDLESS_INSTALL_DIR:-/Applications}"
@@ -1105,7 +1108,8 @@ stage_check() {
       size=$(asset_field "$RELEASE_JSON" "-macos.dmg" size)
     fi
     [ -n "$DL_URL" ] || fatal "This release has no Mac download yet."
-    [[ $DL_URL == https://github.com/$REPO/releases/download/* ]] || fatal "The release points somewhere unexpected, so nothing was downloaded."
+    [[ $DL_URL == https://github.com/$REPO/releases/download/* || $DL_URL == https://github.com/$OLD_REPO/releases/download/* ]] \
+      || fatal "The release points somewhere unexpected, so nothing was downloaded."
     case "$size" in ''|*[!0-9]*|0) size=30000000 ;; esac
     TOTAL=$size
     INSTALLED_VER=$(defaults read "$APP/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "")
