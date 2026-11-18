@@ -1,7 +1,7 @@
 # Boundless Windows installer and updater
-# Usage: irm https://raw.githubusercontent.com/BoundlessReader/Boundless/main/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/BoundlessReader/BoundlessReader/main/install.ps1 | iex
 #
-# Finds the latest release on github.com/BoundlessReader/Boundless, checks the download against the
+# Finds the latest release on github.com/BoundlessReader/BoundlessReader, checks the download against the
 # SHA-256 the release publishes, closes Boundless, saves a copy of your library and settings, and
 # installs the MSI for your user (no administrator prompt). Every run writes a log you can attach
 # to a bug report; its path is printed at the end.
@@ -20,7 +20,10 @@
   try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 
   $InstallerVersion = '2.0.0'
-  $Repo = 'BoundlessReader/Boundless'
+  # The repo as GitHub names it now. It was BoundlessReader/Boundless until 2026-11-12: that name still answers, but the addresses
+  # GitHub sends for the files carry the new one.
+  $Repo = 'BoundlessReader/BoundlessReader'
+  $OldRepo = 'BoundlessReader/Boundless'
   $DiscordUrl = 'https://discord.gg/BDbk4AYV72'
   $Demo = $env:BOUNDLESS_DEMO -eq '1'
   $LocalMsi = $env:BOUNDLESS_LOCAL_MSI
@@ -756,7 +759,8 @@
       $tag = [string]$rel.tag_name
       $latestVer = $tag -replace '^(release-)?v', ''
       if ($tag -notmatch '^[0-9A-Za-z._-]+$') { Fail 0 'GitHub sent a release this installer does not understand.' @($tag) }
-      if ($asset.browser_download_url -notlike "https://github.com/$Repo/releases/download/*") { Fail 0 'The release points somewhere unexpected, so nothing was downloaded.' @([string]$asset.browser_download_url) }
+      $dlUrl = [string]$asset.browser_download_url
+      if (($dlUrl -notlike "https://github.com/$Repo/releases/download/*") -and ($dlUrl -notlike "https://github.com/$OldRepo/releases/download/*")) { Fail 0 'The release points somewhere unexpected, so nothing was downloaded.' @($dlUrl) }
       $sumsAsset = $rel.assets | Where-Object { $_.name -eq 'SHA256SUMS.txt' } | Select-Object -First 1
     }
     # this PC: Windows version, disk, the Visual C++ runtime Boundless needs, the graphics driver
