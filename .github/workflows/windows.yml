@@ -78,7 +78,8 @@ jobs:
           cd out
           gh release download "$TAG" -R "$repo" -p SHA256SUMS.txt -O sums.old || : > sums.old
           grep -v -- '-windows-x64' sums.old > SHA256SUMS.txt || true
-          sha256sum "boundless-v$V-windows-x64.msi" "boundless-v$V-windows-x64-setup.exe" >> SHA256SUMS.txt
+          # Git Bash's sha256sum marks files as binary with a star; the updater reads plain "hash  name" lines.
+          sha256sum "boundless-v$V-windows-x64.msi" "boundless-v$V-windows-x64-setup.exe" | sed 's/ \*/  /' >> SHA256SUMS.txt
           sort -k2 -o SHA256SUMS.txt SHA256SUMS.txt
           cat SHA256SUMS.txt
           for f in "boundless-v$V-windows-x64.msi" "boundless-v$V-windows-x64-setup.exe" SHA256SUMS.txt; do
