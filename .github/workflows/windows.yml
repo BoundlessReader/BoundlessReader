@@ -1,0 +1,98 @@
+name: Windows installer
+
+# Builds the Windows MSI and the small web setup for a published release and attaches them to it, with their lines added to
+# SHA256SUMS.txt (the app's updater and the web setup refuse a file without one). Manual only: Actions, Windows installer, Run workflow.
+# The source is private and is read with READER_SOURCE_TOKEN, a read only token for that one repository. It is never printed.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the installers to, such as v3.6.0
+        required: true
+      ref:
+        description: Source ref to build (defaults to the same tag)
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@v4
+        with:
+          repository: realwuji/boundless-app
+          ref: ${{ inputs.ref || inputs.tag }}
+          token: ${{ secrets.READER_SOURCE_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+      - name: Accept the Android SDK licenses
+        shell: bash
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager.bat" --licenses > /dev/null || true
+      - name: Put WiX on PATH
+        shell: pwsh
+        run: |
+          $wix = Get-ChildItem "${env:ProgramFiles(x86)}" -Directory -Filter "WiX Toolset*" | Sort-Object Name -Descending | Select-Object -First 1
+          if ($wix) { Add-Content $env:GITHUB_PATH (Join-Path $wix.FullName 'bin'); "WiX: $($wix.FullName)" } else { "WiX not found; the Compose plugin fetches its own" }
+      - name: Build the MSI
+        run: ./gradlew --no-daemon :desktopApp:packageMsi
+      - name: Build the web setup
+        shell: pwsh
+        run: ./scripts/build-websetup.ps1
+      - name: Name the files and check the version
+        id: files
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          v=$(sed -n 's/^val appVersion = "\(.*\)"/\1/p' desktopApp/build.gradle.kts)
+          if [ "v$v" != "$TAG" ]; then echo "source is $v, release is $TAG"; exit 1; fi
+          mkdir out
+          cp desktopApp/build/compose/binaries/main/msi/*.msi "out/boundless-v$v-windows-x64.msi"
+          cp dist/Boundless-Setup.exe "out/boundless-v$v-windows-x64-setup.exe"
+          ls -l out
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Attach to the release and add to SHA256SUMS.txt
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          V: ${{ steps.files.outputs.version }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          cd out
+          gh release download "$TAG" -R "$repo" -p SHA256SUMS.txt -O sums.old || : > sums.old
+          grep -v -- '-windows-x64' sums.old > SHA256SUMS.txt || true
+          sha256sum "boundless-v$V-windows-x64.msi" "boundless-v$V-windows-x64-setup.exe" >> SHA256SUMS.txt
+          sort -k2 -o SHA256SUMS.txt SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          for f in "boundless-v$V-windows-x64.msi" "boundless-v$V-windows-x64-setup.exe" SHA256SUMS.txt; do
+            for i in 1 2 3 4; do
+              gh release upload "$TAG" "$f" --clobber -R "$repo" && break
+              echo "upload of $f failed, try $i"; sleep 20
+            done
+          done
+          gh release view "$TAG" -R "$repo" --json assets --jq '.assets[] | "\(.name) \(.digest)"'
+      - name: Keep the files for 3 days
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: out/*
+          retention-days: 3
+          if-no-files-found: ignore
